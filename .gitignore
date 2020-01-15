@@ -105,3 +105,8 @@ zookeeper-client/zookeeper-client-c/generated/
 
 # Python
 *.py[cod]
+
+# Ignore debug conf
+conf/zoo.cfg
+conf/zoo*.cfg
+zookeeper-server/src/main/resources/log4j.properties
