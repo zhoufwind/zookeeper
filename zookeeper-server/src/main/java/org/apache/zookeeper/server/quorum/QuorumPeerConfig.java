@@ -120,6 +120,15 @@ public class QuorumPeerConfig {
     protected String quorumServerLoginContext = QuorumAuth.QUORUM_SERVER_SASL_LOGIN_CONTEXT_DFAULT_VALUE;
     protected int quorumCnxnThreadsSize;
 
+    // multi address related configs
+    private boolean multiAddressEnabled = Boolean.parseBoolean(
+        System.getProperty(QuorumPeer.CONFIG_KEY_MULTI_ADDRESS_ENABLED, QuorumPeer.CONFIG_DEFAULT_MULTI_ADDRESS_ENABLED));
+    private boolean multiAddressReachabilityCheckEnabled =
+        Boolean.parseBoolean(System.getProperty(QuorumPeer.CONFIG_KEY_MULTI_ADDRESS_REACHABILITY_CHECK_ENABLED, "true"));
+    private int multiAddressReachabilityCheckTimeoutMs =
+        Integer.parseInt(System.getProperty(QuorumPeer.CONFIG_KEY_MULTI_ADDRESS_REACHABILITY_CHECK_TIMEOUT_MS,
+                                            String.valueOf(MultipleAddresses.DEFAULT_TIMEOUT.toMillis())));
+
     /**
      * Minimum snapshot retain count.
      * @see org.apache.zookeeper.server.PurgeTxnLog#purge(File, File, int)
@@ -389,6 +398,12 @@ public class QuorumPeerConfig {
             } else if (key.startsWith("metricsProvider.")) {
                 String keyForMetricsProvider = key.substring(16);
                 metricsProviderConfiguration.put(keyForMetricsProvider, value);
+            } else if (key.equals("multiAddress.enabled")) {
+                multiAddressEnabled = Boolean.parseBoolean(value);
+            } else if (key.equals("multiAddress.reachabilityCheckTimeoutMs")) {
+                multiAddressReachabilityCheckTimeoutMs = Integer.parseInt(value);
+            } else if (key.equals("multiAddress.reachabilityCheckEnabled")) {
+                multiAddressReachabilityCheckEnabled = Boolean.parseBoolean(value);
             } else {
                 System.setProperty("zookeeper." + key, value);
             }
@@ -924,6 +939,18 @@ public class QuorumPeerConfig {
 
     public Boolean getQuorumListenOnAllIPs() {
         return quorumListenOnAllIPs;
+    }
+
+    public boolean isMultiAddressEnabled() {
+        return multiAddressEnabled;
+    }
+
+    public boolean isMultiAddressReachabilityCheckEnabled() {
+        return multiAddressReachabilityCheckEnabled;
+    }
+
+    public int getMultiAddressReachabilityCheckTimeoutMs() {
+        return multiAddressReachabilityCheckTimeoutMs;
     }
 
     public static boolean isStandaloneEnabled() {

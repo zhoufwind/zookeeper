@@ -24,6 +24,7 @@ import java.net.NoRouteToHostException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -109,6 +110,26 @@ public class MultipleAddressesTest {
     }
 
     @Test
+    public void testGetReachableOrOneWithSingleReachableAddress() {
+        InetSocketAddress reachableAddress = new InetSocketAddress("127.0.0.1", PortAssignment.unique());
+
+        MultipleAddresses multipleAddresses = new MultipleAddresses(Collections.singletonList(reachableAddress));
+        InetSocketAddress actualReturnedAddress = multipleAddresses.getReachableOrOne();
+
+        Assert.assertEquals(reachableAddress, actualReturnedAddress);
+    }
+
+    @Test
+    public void testGetReachableOrOneWithSingleUnreachableAddress() {
+        InetSocketAddress unreachableAddress = new InetSocketAddress("unreachable.address.zookeeper.apache.com", 1234);
+
+        MultipleAddresses multipleAddresses = new MultipleAddresses(Collections.singletonList(unreachableAddress));
+        InetSocketAddress actualReturnedAddress = multipleAddresses.getReachableOrOne();
+
+        Assert.assertEquals(unreachableAddress, actualReturnedAddress);
+    }
+
+    @Test
     public void testRecreateSocketAddresses() throws UnknownHostException {
         List<InetSocketAddress> searchedAddresses = Arrays.stream(InetAddress.getAllByName("google.com"))
                 .map(addr -> new InetSocketAddress(addr, 222)).collect(Collectors.toList());
@@ -167,6 +188,32 @@ public class MultipleAddressesTest {
     }
 
     @Test
+    public void testGetAllReachableAddressesOrAllWhenSomeReachable() throws Exception {
+        InetSocketAddress reachableHost1 = new InetSocketAddress("127.0.0.1", 1234);
+        InetSocketAddress reachableHost2 = new InetSocketAddress("127.0.0.1", 2345);
+        InetSocketAddress unreachableHost1 = new InetSocketAddress("unreachable1.address.zookeeper.apache.com", 1234);
+        InetSocketAddress unreachableHost2 = new InetSocketAddress("unreachable2.address.zookeeper.apache.com", 1234);
+
+        MultipleAddresses multipleAddresses = new MultipleAddresses(
+          Arrays.asList(unreachableHost1, unreachableHost2, reachableHost1, reachableHost2));
+
+        Set<InetSocketAddress> reachableHosts = new HashSet<>(Arrays.asList(reachableHost1, reachableHost2));
+        Assert.assertEquals(reachableHosts, multipleAddresses.getAllReachableAddressesOrAll());
+    }
+
+    @Test
+    public void testGetAllReachableAddressesOrAllWhenNoneReachable() throws Exception {
+        InetSocketAddress unreachableHost1 = new InetSocketAddress("unreachable1.address.zookeeper.apache.com", 1234);
+        InetSocketAddress unreachableHost2 = new InetSocketAddress("unreachable2.address.zookeeper.apache.com", 1234);
+        InetSocketAddress unreachableHost3 = new InetSocketAddress("unreachable3.address.zookeeper.apache.com", 1234);
+        List<InetSocketAddress> allUnreachableAddresses = Arrays.asList(unreachableHost1, unreachableHost2, unreachableHost3);
+
+        MultipleAddresses multipleAddresses = new MultipleAddresses(allUnreachableAddresses);
+
+        Assert.assertEquals(new HashSet<>(allUnreachableAddresses), multipleAddresses.getAllReachableAddressesOrAll());
+    }
+
+    @Test
     public void testEquals() {
         List<InetSocketAddress> addresses = getAddressList();
 
@@ -178,6 +225,14 @@ public class MultipleAddressesTest {
         MultipleAddresses multipleAddressesNotEquals = new MultipleAddresses(getAddressList());
 
         Assert.assertNotEquals(multipleAddresses, multipleAddressesNotEquals);
+    }
+
+    @Test
+    public void testSize() {
+        List<InetSocketAddress> addresses = getAddressList();
+        MultipleAddresses multipleAddresses = new MultipleAddresses(addresses);
+
+        Assert.assertEquals(PORTS_AMOUNT, multipleAddresses.size());
     }
 
     public List<Integer> getPortList() {

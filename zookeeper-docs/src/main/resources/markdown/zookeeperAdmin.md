@@ -1133,6 +1133,15 @@ property, when available, is noted below.
     effect due to TLS handshake timeout when there are too many in-flight TLS 
     handshakes. Set it to something like 250 is good enough to avoid herd effect.
 
+* *throttledOpWaitTime*
+    (Java system property: **zookeeper.throttled_op_wait_time**)
+    The time in the RequestThrottler queue longer than which a request will be marked as throttled.
+    A throttled requests will not be processed other than being fed down the pipeline of the server it belongs to
+    to preserve the order of all requests.
+    The FinalProcessor will issue an error response (new error code: ZTHROTTLEDOP) for these undigested requests.
+    The intent is for the clients not to retry them immediately.
+    When set to 0, no requests will be throttled. The default is 0.
+
 <a name="sc_clusterOptions"></a>
 
 #### Cluster Options
@@ -1211,7 +1220,8 @@ of servers -- that is, when deploying clusters of servers.
     <a name="id_multi_address"></a>
     Since ZooKeeper 3.6.0 it is possible to specify **multiple addresses** for each
     ZooKeeper server (see [ZOOKEEPER-3188](https://issues.apache.org/jira/projects/ZOOKEEPER/issues/ZOOKEEPER-3188)).
-    This helps to increase availability and adds network level 
+    To enable this feature, you must set the *multiAddress.enabled* configuration property
+    to *true*. This helps to increase availability and adds network level 
     resiliency to ZooKeeper. When multiple physical network interfaces are used 
     for the servers, ZooKeeper is able to bind on all interfaces and runtime switching 
     to a working interface in case a network error. The different addresses can be specified
@@ -1220,7 +1230,18 @@ of servers -- that is, when deploying clusters of servers.
         server.1=zoo1-net1:2888:3888|zoo1-net2:2889:3889
         server.2=zoo2-net1:2888:3888|zoo2-net2:2889:3889
         server.3=zoo3-net1:2888:3888|zoo3-net2:2889:3889
-       
+
+
+    ###### Note
+    >By enabling this feature, the Quorum protocol (ZooKeeper Server-Server protocol) will change.
+    The users will not notice this and when anyone starts a ZooKeeper cluster with the new config,
+    everything will work normally. However, it's not possible to enable this feature and specify
+    multiple addresses during a rolling upgrade if the old ZooKeeper cluster didn't support the
+    *multiAddress* feature (and the new Quorum protocol). In case if you need this feature but you
+    also need to perform a rolling upgrade from a ZooKeeper cluster older than *3.6.0*, then you
+    first need to do the rolling upgrade without enabling the MultiAddress feature and later make
+    a separate rolling restart with the new configuration where **multiAddress.enabled** is set
+    to **true** and multiple addresses are provided.
 
 * *syncLimit* :
     (No Java system property)
@@ -1335,7 +1356,23 @@ As an example, this will enable all four letter word commands:
     properly, check your operating system's options regarding TCP
     keepalive for more information.  Defaults to
     **false**.
-    
+
+* *clientTcpKeepAlive* :
+    (Java system property: **zookeeper.clientTcpKeepAlive**)
+    **New in 3.6.1:**
+    Setting this to true sets the TCP keepAlive flag on the
+    client sockets. Some broken network infrastructure may lose
+    the FIN packet that is sent from closing client. These never
+    closed client sockets cause OS resource leak. Enabling this
+    option terminates these zombie sockets by idle check.
+    Enabling this option relies on OS level settings to work
+    properly, check your operating system's options regarding TCP
+    keepalive for more information. Defaults to **false**. Please
+    note the distinction between it and **tcpKeepAlive**. It is
+    applied for the client sockets while **tcpKeepAlive** is for
+    the sockets used by quorum members. Currently this option is
+    only available when default `NIOServerCnxnFactory` is used.
+
 * *electionPortBindRetry* :
     (Java system property only: **zookeeper.electionPortBindRetry**)
     Property set max retry count when Zookeeper server fails to bind 
@@ -1376,6 +1413,11 @@ As an example, this will enable all four letter word commands:
 
 The options in this section allow control over
 encryption/authentication/authorization performed by the service.
+
+Beside this page, you can also find useful information about client side configuration in the 
+[Programmers Guide](zookeeperProgrammers.html#sc_java_client_configuration). 
+The ZooKeeper Wiki also has useful pages about [ZooKeeper SSL support](https://cwiki.apache.org/confluence/display/ZOOKEEPER/ZooKeeper+SSL+User+Guide), 
+and [SASL authentication for ZooKeeper](https://cwiki.apache.org/confluence/display/ZOOKEEPER/ZooKeeper+and+SASL).
 
 * *DigestAuthenticationProvider.superDigest* :
     (Java system property: **zookeeper.DigestAuthenticationProvider.superDigest**)
@@ -1540,11 +1582,53 @@ encryption/authentication/authorization performed by the service.
     TBD
 
 * *client.portUnification*:
-    (Java system properties: **zookeeper.client.portUnification**)
+    (Java system property: **zookeeper.client.portUnification**)
     Specifies that the client port should accept SSL connections
     (using the same configuration as the secure client port).
     Default: false
+    
+* *authProvider*:
+    (Java system property: **zookeeper.authProvider**)
+    You can specify multiple authentication provider classes for ZooKeeper.
+    Usually you use this parameter to specify the SASL authentication provider
+    like: `authProvider.1=org.apache.zookeeper.server.auth.SASLAuthenticationProvider`
+    
+* *kerberos.removeHostFromPrincipal*
+    (Java system property: **zookeeper.kerberos.removeHostFromPrincipal**)
+    You can instruct ZooKeeper to remove the host from the client principal name during authentication.
+    (e.g. the zk/myhost@EXAMPLE.COM client principal will be authenticated in ZooKeeper as zk@EXAMPLE.COM)
+    Default: false
+    
+* *kerberos.removeRealmFromPrincipal*
+    (Java system property: **zookeeper.kerberos.removeRealmFromPrincipal**)
+    You can instruct ZooKeeper to remove the realm from the client principal name during authentication.
+    (e.g. the zk/myhost@EXAMPLE.COM client principal will be authenticated in ZooKeeper as zk/myhost)
+    Default: false
 
+* *multiAddress.enabled* :
+    (Java system property: **zookeeper.multiAddress.enabled**)
+    **New in 3.6.0:**
+    Since ZooKeeper 3.6.0 you can also [specify multiple addresses](#id_multi_address) 
+    for each ZooKeeper server instance (this can increase availability when multiple physical 
+    network interfaces can be used parallel in the cluster). Setting this parameter to 
+    **true** will enable this feature. Please note, that you can not enable this feature
+    during a rolling upgrade if the version of the old ZooKeeper cluster is prior to 3.6.0.
+    The default value is **false**.
+
+* *multiAddress.reachabilityCheckTimeoutMs* :
+    (Java system property: **zookeeper.multiAddress.reachabilityCheckTimeoutMs**)
+    **New in 3.6.0:**
+    Since ZooKeeper 3.6.0 you can also [specify multiple addresses](#id_multi_address) 
+    for each ZooKeeper server instance (this can increase availability when multiple physical 
+    network interfaces can be used parallel in the cluster). ZooKeeper will perform ICMP ECHO requests
+    or try to establish a TCP connection on port 7 (Echo) of the destination host in order to find 
+    the reachable addresses. This happens only if you provide multiple addresses in the configuration.
+    In this property you can set the timeout in millisecs for the reachability check. The check happens 
+    in parallel for the different addresses, so the timeout you set here is the maximum time will be taken
+    by checking the reachability of all addresses.
+    The default value is **1000**.
+
+    This parameter has no effect, unless you enable the MultiAddress feature by setting *multiAddress.enabled=true*.    
 
 <a name="Experimental+Options%2FFeatures"></a>
 
@@ -1620,6 +1704,23 @@ the variable does.
     configuration file. It affects the connections handling the
     ZAB protocol and the Fast Leader Election protocol. Default
     value is **false**.
+
+* *multiAddress.reachabilityCheckEnabled* :
+    (Java system property: **zookeeper.multiAddress.reachabilityCheckEnabled**)
+    **New in 3.6.0:**
+    Since ZooKeeper 3.6.0 you can also [specify multiple addresses](#id_multi_address) 
+    for each ZooKeeper server instance (this can increase availability when multiple physical 
+    network interfaces can be used parallel in the cluster). ZooKeeper will perform ICMP ECHO requests
+    or try to establish a TCP connection on port 7 (Echo) of the destination host in order to find 
+    the reachable addresses. This happens only if you provide multiple addresses in the configuration.
+    The reachable check can fail if you hit some ICMP rate-limitation, (e.g. on MacOS) when you try to 
+    start a large (e.g. 11+) ensemble members cluster on a single machine for testing. 
+    
+    Default value is **true**. By setting this parameter to 'false' you can disable the reachability checks. 
+    Please note, disabling the reachability check will cause the cluster not to be able to reconfigure 
+    itself properly during network problems, so the disabling is advised only during testing. 
+
+    This parameter has no effect, unless you enable the MultiAddress feature by setting *multiAddress.enabled=true*.
 
 <a name="Disabling+data+directory+autocreation"></a>
 
@@ -2424,9 +2525,7 @@ a running replicated ZooKeeper server to a development machine with a
 stand-alone ZooKeeper server for troubleshooting.
 
 Using older log and snapshot files, you can look at the previous
-state of ZooKeeper servers and even restore that state. The
-LogFormatter class allows an administrator to look at the transactions
-in a log.
+state of ZooKeeper servers and even restore that state.
 
 The ZooKeeper server creates snapshot and log files, but
 never deletes them. The retention policy of the data and log
